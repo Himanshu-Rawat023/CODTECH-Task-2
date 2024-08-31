@@ -1,0 +1,111 @@
+\\ Basic Authentication System
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const session = require('express-session');
+const bodyParser = require('body-parser');
+
+const app = express();
+
+
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(session({
+    secret: 'yourSecretKey', // Replace with your secret key
+    resave: false,
+    saveUninitialized: true,
+}));
+
+const users = [];
+
+app.get('/', (req, res) => {
+    res.send(`
+        <h1>Welcome to the Basic Authentication System!</h1>
+        <p><a href="/register">Register</a></p>
+        <p><a href="/login">Login</a></p>
+    `);
+});
+
+app.get('/register', (req, res) => {
+    res.send(`
+        <form action="/register" method="post">
+            <label for="username">Username:</label><br>
+            <input type="text" id="username" name="username"><br>
+            <label for="password">Password:</label><br>
+            <input type="password" id="password" name="password"><br><br>
+            <input type="submit" value="Register">
+        </form>
+    `);
+});
+
+app.post('/register', async (req, res) => {
+    const { username, password } = req.body;
+
+    const userExists = users.find(user => user.username === username);
+    if (userExists) {
+        return res.status(400).send('User already exists!');
+    }
+
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    users.push({ username, password: hashedPassword });
+    res.send('Registration successful! <a href="/login">Login</a>');
+});
+
+
+app.get('/login', (req, res) => {
+    res.send(`
+        <form action="/login" method="post">
+            <label for="username">Username:</label><br>
+            <input type="text" id="username" name="username"><br>
+            <label for="password">Password:</label><br>
+            <input type="password" id="password" name="password"><br><br>
+            <input type="submit" value="Login">
+        </form>
+    `);
+});
+
+
+app.post('/login', async (req, res) => {
+    const { username, password } = req.body;
+
+    const user = users.find(user => user.username === username);
+    if (!user) {
+        return res.status(400).send('User not found!');
+    }
+
+
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+        return res.status(400).send('Invalid password!');
+    }
+
+    req.session.user = user;
+    res.redirect('/dashboard');
+});
+
+// Serve the protected dashboard
+app.get('/dashboard', (req, res) => {
+    if (!req.session.user) {
+        return res.status(401).send('You must log in to access this page.');
+    }
+    res.send(`
+        <h1>Welcome to your dashboard, ${req.session.user.username}!</h1>
+        <form action="/logout" method="post">
+            <input type="submit" value="Logout">
+        </form>
+    `);
+});
+
+app.post('/logout', (req, res) => {
+    req.session.destroy(err => {
+        if (err) {
+            return res.status(500).send('Could not log out.');
+        }
+        res.redirect('/');
+    });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+});
